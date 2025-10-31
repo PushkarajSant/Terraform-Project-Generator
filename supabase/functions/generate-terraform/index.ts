@@ -46,6 +46,8 @@ Cloud Provider: ${provider.toUpperCase()}
 Project Name: ${projectName}
 Region: ${region || "default region for provider"}
 
+IMPORTANT: Return ONLY a valid JSON object. Do not include any markdown, explanations, or text before or after the JSON.
+
 Return your response as a JSON object with this exact structure:
 {
   "files": [
@@ -79,7 +81,7 @@ Return your response as a JSON object with this exact structure:
           { role: "system", content: systemPrompt },
           { role: "user", content: description },
         ],
-        max_completion_tokens: 4000,
+        max_completion_tokens: 8000,
       }),
     });
 
@@ -117,9 +119,21 @@ Return your response as a JSON object with this exact structure:
     // Parse the AI response
     let result;
     try {
-      // Extract JSON from markdown code blocks if present
-      const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/```\n([\s\S]*?)\n```/);
-      const jsonString = jsonMatch ? jsonMatch[1] : content;
+      // Try multiple extraction strategies
+      let jsonString = content;
+      
+      // Strategy 1: Extract from markdown code blocks
+      const codeBlockMatch = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/```\n([\s\S]*?)\n```/);
+      if (codeBlockMatch) {
+        jsonString = codeBlockMatch[1];
+      } else {
+        // Strategy 2: Find first { and last } for raw JSON
+        const firstBrace = content.indexOf('{');
+        const lastBrace = content.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          jsonString = content.substring(firstBrace, lastBrace + 1);
+        }
+      }
       
       if (!jsonString || jsonString.trim() === "") {
         throw new Error("Empty JSON string after extraction");
@@ -129,7 +143,7 @@ Return your response as a JSON object with this exact structure:
       result = JSON.parse(jsonString);
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
-      console.error("Content that failed to parse:", content);
+      console.error("Content that failed to parse (first 1000 chars):", content.substring(0, 1000));
       throw new Error(`Failed to parse AI-generated Terraform configuration: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
     }
 
