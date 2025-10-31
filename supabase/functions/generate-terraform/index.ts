@@ -31,43 +31,13 @@ serve(async (req) => {
     const aiModel = modelMap[model] || "google/gemini-2.5-flash";
 
     const systemPrompt = `You are an expert DevOps engineer specialized in Terraform infrastructure as code. 
-Your task is to generate complete, production-ready Terraform projects based on user requirements.
+Generate complete, production-ready Terraform projects based on user requirements.
 
-CRITICAL INSTRUCTIONS:
-1. Generate ALL necessary Terraform files: main.tf, variables.tf, outputs.tf, providers.tf, README.md, and terraform.tfvars.example
-2. Apply security best practices by default (private networks, encryption, least privilege, proper tagging)
-3. Validate requirements and auto-fix any ambiguities or issues
-4. Provide detailed diagnostics explaining design choices
-5. Note any corrections made to the original requirements
-6. Suggest improvements where applicable
-7. Generate a clear README explaining the infrastructure in plain English
+Apply security best practices by default (private networks, encryption, least privilege, proper tagging).
 
 Cloud Provider: ${provider.toUpperCase()}
 Project Name: ${projectName}
-Region: ${region || "default region for provider"}
-
-IMPORTANT: Return ONLY a valid JSON object. Do not include any markdown, explanations, or text before or after the JSON.
-
-Return your response as a JSON object with this exact structure:
-{
-  "files": [
-    {"name": "main.tf", "content": "..."},
-    {"name": "variables.tf", "content": "..."},
-    {"name": "outputs.tf", "content": "..."},
-    {"name": "providers.tf", "content": "..."},
-    {"name": "README.md", "content": "..."},
-    {"name": "terraform.tfvars.example", "content": "..."}
-  ],
-  "variables": [
-    {"name": "variable_name", "type": "string", "description": "...", "default": "..."}
-  ],
-  "diagnostics": [
-    {"type": "info|warning|success", "message": "..."}
-  ],
-  "corrections": [
-    {"original": "...", "corrected": "...", "reason": "..."}
-  ]
-}`;
+Region: ${region || "default region for provider"}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -81,7 +51,67 @@ Return your response as a JSON object with this exact structure:
           { role: "system", content: systemPrompt },
           { role: "user", content: description },
         ],
-        max_completion_tokens: 8000,
+        max_completion_tokens: 16000,
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "generate_terraform_project",
+              description: "Generate a complete Terraform project with all necessary files",
+              parameters: {
+                type: "object",
+                properties: {
+                  files: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string", description: "Filename (e.g., main.tf)" },
+                        content: { type: "string", description: "Full file content" }
+                      },
+                      required: ["name", "content"]
+                    }
+                  },
+                  variables: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        name: { type: "string" },
+                        type: { type: "string" },
+                        description: { type: "string" },
+                        default: { type: "string" }
+                      }
+                    }
+                  },
+                  diagnostics: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        type: { type: "string", enum: ["info", "warning", "success"] },
+                        message: { type: "string" }
+                      }
+                    }
+                  },
+                  corrections: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        original: { type: "string" },
+                        corrected: { type: "string" },
+                        reason: { type: "string" }
+                      }
+                    }
+                  }
+                },
+                required: ["files"]
+              }
+            }
+          }
+        ],
+        tool_choice: { type: "function", function: { name: "generate_terraform_project" } }
       }),
     });
 
@@ -106,44 +136,23 @@ Return your response as a JSON object with this exact structure:
     const aiResponse = await response.json();
     console.log("AI Response structure:", JSON.stringify(aiResponse, null, 2));
     
-    const content = aiResponse.choices?.[0]?.message?.content;
-
-    if (!content) {
-      console.error("No content in AI response. Full response:", JSON.stringify(aiResponse, null, 2));
-      throw new Error("No content in AI response");
+    // Extract result from tool call
+    const toolCall = aiResponse.choices?.[0]?.message?.tool_calls?.[0];
+    
+    if (!toolCall || toolCall.function?.name !== "generate_terraform_project") {
+      console.error("No tool call in AI response. Full response:", JSON.stringify(aiResponse, null, 2));
+      throw new Error("AI did not call the expected function");
     }
 
-    console.log("AI response content length:", content.length);
-    console.log("AI response content preview:", content.substring(0, 500));
+    const functionArgs = toolCall.function.arguments;
+    console.log("Function arguments length:", functionArgs.length);
 
-    // Parse the AI response
     let result;
     try {
-      // Try multiple extraction strategies
-      let jsonString = content;
-      
-      // Strategy 1: Extract from markdown code blocks
-      const codeBlockMatch = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/```\n([\s\S]*?)\n```/);
-      if (codeBlockMatch) {
-        jsonString = codeBlockMatch[1];
-      } else {
-        // Strategy 2: Find first { and last } for raw JSON
-        const firstBrace = content.indexOf('{');
-        const lastBrace = content.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-          jsonString = content.substring(firstBrace, lastBrace + 1);
-        }
-      }
-      
-      if (!jsonString || jsonString.trim() === "") {
-        throw new Error("Empty JSON string after extraction");
-      }
-      
-      console.log("Attempting to parse JSON, length:", jsonString.length);
-      result = JSON.parse(jsonString);
+      result = JSON.parse(functionArgs);
     } catch (parseError) {
-      console.error("Failed to parse AI response:", parseError);
-      console.error("Content that failed to parse (first 1000 chars):", content.substring(0, 1000));
+      console.error("Failed to parse tool call arguments:", parseError);
+      console.error("Arguments that failed to parse (first 1000 chars):", functionArgs.substring(0, 1000));
       throw new Error(`Failed to parse AI-generated Terraform configuration: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
     }
 
