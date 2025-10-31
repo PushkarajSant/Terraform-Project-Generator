@@ -15,13 +15,13 @@ serve(async (req) => {
 
     console.log("Generating Terraform project:", { model, provider, projectName, region });
 
-    // Use Lovable AI instead of external APIs
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    // Use AI API
+    const AI_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    if (!AI_API_KEY) {
+      throw new Error("AI_API_KEY is not configured");
     }
 
-    // Map user's model selection to Lovable AI models
+    // Map user's model selection to AI models
     const modelMap: Record<string, string> = {
       gemini: "google/gemini-2.5-pro",
       gpt: "openai/gpt-5",
@@ -42,7 +42,7 @@ Region: ${region || "default region for provider"}`;
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${AI_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
