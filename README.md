@@ -4,6 +4,9 @@
 
 ---
 
+<img width="1349" height="768" alt="image" src="https://github.com/user-attachments/assets/7ea2fe99-ef33-48bf-a374-91ae0372b221" />
+
+
 ## 🧠 Overview
 
 **Terraform Project Generator** is an AI-powered tool that converts natural language infrastructure requirements into complete, production-grade Terraform configurations for **AWS**, **GCP**, and **Azure** — all with built-in security best practices.
