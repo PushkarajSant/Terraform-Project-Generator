@@ -102,11 +102,17 @@ Return your response as a JSON object with this exact structure:
     }
 
     const aiResponse = await response.json();
+    console.log("AI Response structure:", JSON.stringify(aiResponse, null, 2));
+    
     const content = aiResponse.choices?.[0]?.message?.content;
 
     if (!content) {
+      console.error("No content in AI response. Full response:", JSON.stringify(aiResponse, null, 2));
       throw new Error("No content in AI response");
     }
+
+    console.log("AI response content length:", content.length);
+    console.log("AI response content preview:", content.substring(0, 500));
 
     // Parse the AI response
     let result;
@@ -114,11 +120,17 @@ Return your response as a JSON object with this exact structure:
       // Extract JSON from markdown code blocks if present
       const jsonMatch = content.match(/```json\n([\s\S]*?)\n```/) || content.match(/```\n([\s\S]*?)\n```/);
       const jsonString = jsonMatch ? jsonMatch[1] : content;
+      
+      if (!jsonString || jsonString.trim() === "") {
+        throw new Error("Empty JSON string after extraction");
+      }
+      
+      console.log("Attempting to parse JSON, length:", jsonString.length);
       result = JSON.parse(jsonString);
     } catch (parseError) {
       console.error("Failed to parse AI response:", parseError);
-      console.log("AI response content:", content);
-      throw new Error("Failed to parse AI-generated Terraform configuration");
+      console.error("Content that failed to parse:", content);
+      throw new Error(`Failed to parse AI-generated Terraform configuration: ${parseError instanceof Error ? parseError.message : 'Unknown error'}`);
     }
 
     // Ensure all required fields are present
